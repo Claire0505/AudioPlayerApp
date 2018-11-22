@@ -7,6 +7,8 @@ import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.IBinder;
 
+import java.io.IOException;
+
 // Service需要在AndroidManifest.xml文件中聲明 <service android:name=".MediaPlayerService"/>
 public class MediaPlayerService extends Service implements
         MediaPlayer.OnCompletionListener,
@@ -18,6 +20,10 @@ public class MediaPlayerService extends Service implements
         //處理AudioFocus來自其他想要播放媒體文件的應用程序請求
         AudioManager.OnAudioFocusChangeListener {
 
+    private MediaPlayer mediaPlayer;
+    //path to the audio file
+    private String mediaFile;
+
     // Binder given to clients
     private final IBinder iBinder = new LocalBinder();
 
@@ -25,6 +31,39 @@ public class MediaPlayerService extends Service implements
     public IBinder onBind(Intent intent) {
         return iBinder;
     }
+
+    /**
+     * MediaPlayer actions
+     */
+    private void initMediaPlayer(){
+        if (mediaPlayer == null){
+            mediaPlayer = new MediaPlayer(); //new MediaPlayer instance
+        }
+        //Set up MediaPlayer event listeners
+        mediaPlayer.setOnCompletionListener(this);
+        mediaPlayer.setOnErrorListener(this);
+        mediaPlayer.setOnPreparedListener(this);
+        mediaPlayer.setOnBufferingUpdateListener(this);
+        mediaPlayer.setOnSeekCompleteListener(this);
+        mediaPlayer.setOnInfoListener(this);
+        //Reset to that the MediaPlayer is not pointing to another data source
+        //重置，以便MediaPlayer不指向其他數據源
+        mediaPlayer.reset();
+
+        mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+
+        try {
+            // set the data source the mediaFile location
+            mediaPlayer.setDataSource(mediaFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+            stopSelf();
+        }
+
+        mediaPlayer.prepareAsync();
+
+    }
+
 
     /**
      * onBufferingUpdate(MediaPlayer mp, int percent)被調用以更新緩衝通過漸進式HTTP下載接收的媒體流的狀態。
