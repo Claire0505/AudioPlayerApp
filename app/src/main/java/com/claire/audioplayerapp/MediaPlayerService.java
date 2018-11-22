@@ -1,6 +1,7 @@
 package com.claire.audioplayerapp;
 
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
@@ -27,6 +28,9 @@ public class MediaPlayerService extends Service implements
 
     //Used to pause/resume MediaPlayer 儲存暫停/重啟的位置
     private int resumePosition;
+
+    //AudioFocus
+    private AudioManager audioManager;
 
     // Binder given to clients
     private final IBinder iBinder = new LocalBinder();
@@ -176,8 +180,56 @@ public class MediaPlayerService extends Service implements
      * 在更新系統的音頻焦點時調用 (Invoked when the audio focus of the system is updated.)
      */
     @Override
-    public void onAudioFocusChange(int focusChange) {
+    public void onAudioFocusChange(int focusState) {
+        //Invoked when the audio focus of the system is updated.
+        switch (focusState){
+            case AudioManager.AUDIOFOCUS_GAIN: //該服務獲取了音頻焦點，因此需要開始播放
+                //resume playback 恢復播放
+                if (mediaPlayer == null){
+                    initMediaPlayer();
+                }
+                else if (!mediaPlayer.isPlaying()){
+                    mediaPlayer.start();;
+                    mediaPlayer.setVolume(1.0f, 1.0f);
+                }
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS: //該服務丟失了音頻焦點，用戶可能轉移到另一個應用程序上播放媒體，因此釋放媒體播放器
+                // Lost focus for an unbounded amount of time: stop playback and release media player
+                if (mediaPlayer.isPlaying()) mediaPlayer.stop();
+                mediaPlayer.release();
+                mediaPlayer = null;
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT: //Focus失去了一小段時間，暫停了MediaPlayer。
+                // Lost focus a short time, but we have to stop playback
+                // We don't release the media player because playback is likely to resume
+                if (mediaPlayer.isPlaying()) mediaPlayer.pause();
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK: //短時間丟失焦點，可能是設備上的通知，降低了播放音量
+                // Lost focus for a short time, but it's ok to keep playing
+                // at an attenuated level
+                if (mediaPlayer.isPlaying()) mediaPlayer.setVolume(0.1f,0.1f);
+                break;
 
+        }
+
+    }
+
+    /**
+     * AudioFocus 請求焦點
+     */
+    private boolean requestAudioFocus(){
+        audioManager = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
+        int result = audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED){
+            //Focus gained
+            return true;
+        }
+        //Could not gain focus
+        return false;
+    }
+    //釋放音頻焦點
+    private boolean revomeAudioFocus(){
+        return AudioManager.AUDIOFOCUS_REQUEST_GRANTED == audioManager.abandonAudioFocus(this);
     }
 
     /**
