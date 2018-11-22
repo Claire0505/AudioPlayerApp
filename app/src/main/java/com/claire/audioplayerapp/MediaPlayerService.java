@@ -24,9 +24,15 @@ public class MediaPlayerService extends Service implements
     //path to the audio file
     private String mediaFile;
 
+    //Used to pause/resume MediaPlayer 儲存暫停/重啟的位置
+    private int resumePosition;
+
     // Binder given to clients
     private final IBinder iBinder = new LocalBinder();
 
+    /**
+     * Service lifecycle methods 生命週期
+     */
     @Override
     public IBinder onBind(Intent intent) {
         return iBinder;
@@ -64,8 +70,37 @@ public class MediaPlayerService extends Service implements
 
     }
 
+    private void playMedia(){
+        if (!mediaPlayer.isPlaying()){
+            mediaPlayer.start();
+        }
+    }
+
+    private void stopMedia(){
+        if (mediaPlayer == null) return;
+
+        if (mediaPlayer.isPlaying()){
+            mediaPlayer.stop();
+        }
+    }
+
+    private void pauseMedia(){
+        if (mediaPlayer.isPlaying()){
+            mediaPlayer.pause();
+            resumePosition = mediaPlayer.getCurrentPosition();
+        }
+    }
+
+    private void resumeMedia(){
+        if (!mediaPlayer.isPlaying()){
+            mediaPlayer.seekTo(resumePosition);
+            mediaPlayer.start();
+        }
+    }
+
 
     /**
+     * MediaPlayer callback methods
      * onBufferingUpdate(MediaPlayer mp, int percent)被調用以更新緩衝通過漸進式HTTP下載接收的媒體流的狀態。
      * 接收的緩衝百分比表示已緩衝或播放了多少內容。例如，當已經播放了一半內容時，緩衝更新為80％表示要播放的下一個30％的內容已被緩衝。
      */
@@ -127,6 +162,9 @@ public class MediaPlayerService extends Service implements
 
     }
 
+    /**
+     * Service Binder
+     */
     public class LocalBinder extends Binder {
 
         public MediaPlayerService getService(){
