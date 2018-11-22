@@ -1,8 +1,13 @@
 package com.claire.audioplayerapp;
 
 import android.Manifest;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
@@ -12,10 +17,14 @@ import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Toast;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_PERMISSION = 100;
+    //綁定MediaPlayer
+    private MediaPlayerService playerService;
+    boolean serviceBound = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,6 +41,8 @@ public class MainActivity extends AppCompatActivity {
                     REQUEST_PERMISSION);
 
         }
+
+        playAudio("https://upload.wikimedia.org/wikipedia/commons/6/6c/Grieg_Lyric_Pieces_Kobold.ogg");
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -55,6 +66,38 @@ public class MainActivity extends AppCompatActivity {
                         grantResults[0] == PackageManager.PERMISSION_GRANTED){
                     //取得權限
                 }
+        }
+    }
+
+    // Binding this Client to the AudioPlayer Service 將此客戶端綁定到AudioPlayer服務
+    private ServiceConnection serviceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            //We've bound to LocalService, cast the IBinder and LocalService instance.
+            //我們綁定到LocalService，將制轉換IBinder並獲取LocalService實例
+            MediaPlayerService.LocalBinder binder = (MediaPlayerService.LocalBinder) service;
+
+            playerService = binder.getService();
+            serviceBound = true;
+            Toast.makeText(MainActivity.this, "Service Bound", Toast.LENGTH_SHORT).show();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            serviceBound = false;
+        }
+    };
+
+    private void playAudio(String media){
+        //Check is service is active
+        if (!serviceBound){ //true
+            Intent playerIntent = new Intent(this, MediaPlayerService.class);
+            playerIntent.putExtra("media", media);
+            startService(playerIntent);
+            bindService(playerIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+        } else {
+            //Service is active
+            //Send media with BroadcastReceiver
         }
     }
 
