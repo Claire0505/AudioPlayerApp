@@ -44,6 +44,33 @@ public class MediaPlayerService extends Service implements
     }
 
     /**
+     * The system calls method when an activity, request the service be started
+     * 系統在活動時調用此方法，請求啟動服務
+     */
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        try {
+            //An audio file is passed to the service through putExtra();
+            //音頻文件通過putExtra()傳遞給服務
+            mediaFile = intent.getExtras().getString("media");
+        }catch (NullPointerException e){
+
+            stopSelf();
+        }
+
+        //Request audio focus 請求音頻焦點
+        if (requestAudioFocus() == false){
+            //Could nto gain focus //無法獲很焦點
+            stopSelf();
+        }
+
+        if (mediaFile != null && !mediaFile.equals(""))
+            initMediaPlayer();
+
+        return super.onStartCommand(intent, flags, startId);
+    }
+
+    /**
      * MediaPlayer actions
      */
     private void initMediaPlayer(){
