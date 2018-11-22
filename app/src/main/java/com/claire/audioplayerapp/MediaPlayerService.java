@@ -70,6 +70,16 @@ public class MediaPlayerService extends Service implements
         return super.onStartCommand(intent, flags, startId);
     }
 
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (mediaPlayer != null){
+            stopMedia();
+            mediaPlayer.release();
+        }
+        revomeAudioFocus();
+    }
+
     /**
      * MediaPlayer actions
      */
