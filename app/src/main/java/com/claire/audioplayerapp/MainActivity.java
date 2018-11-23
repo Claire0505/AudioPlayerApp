@@ -7,21 +7,24 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.content.res.TypedArray;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.PersistableBundle;
 import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.ImageView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
@@ -32,50 +35,97 @@ public class MainActivity extends AppCompatActivity {
     //綁定MediaPlayer
     private MediaPlayerService playerService;
     boolean serviceBound = false;
-
     ArrayList<Audio> audioList;
+
+    private Toolbar toolbar;
+    private FloatingActionButton fab;
+    private ImageView collapsingImageView;
+    int imageIndex = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE )
-                != PackageManager.PERMISSION_GRANTED &&
-               ActivityCompat.checkSelfPermission(this,  Manifest.permission.READ_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED ){
-            //未取得權限，向使用者要求允許權限
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_EXTERNAL_STORAGE},
-                    REQUEST_PERMISSION);
+        checkSelfPermission();
+        initView();
+        initHandler();
 
-        }
+        loadCollapsingImage(imageIndex);
+        //loadAudio(); //從設備檢索數據後，該playAudio()功能可以在設備上播放Service
+        //initRecyclerView();
 
-        //playAudio("https://upload.wikimedia.org/wikipedia/commons/6/6c/Grieg_Lyric_Pieces_Kobold.ogg");
-        loadAudio(); //從設備檢索數據後，該playAudio()功能可以在設備上播放Service
-        //play the first audio in the ArrayList
-        playAudio(audioList.get(0).getData());
+    }
 
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+    private void initView() {
+        toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+        fab = findViewById(R.id.fab);
+        collapsingImageView = findViewById(R.id.collapsingImageView);
+    }
 
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+    private void initHandler() {
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                //playAudio("https://upload.wikimedia.org/wikipedia/commons/6/6c/Grieg_Lyric_Pieces_Kobold.ogg");
+                //play the first audio in the ArrayList
+                //playAudio(audioList.get(0).getData());
+
+                if (imageIndex == 4) {
+                    imageIndex = 0;
+                    loadCollapsingImage(imageIndex);
+                } else {
+                    loadCollapsingImage(++imageIndex);
+                }
                 Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
                         .setAction("Action", null).show();
             }
         });
+
     }
+
+    private void loadCollapsingImage(int i) {
+        TypedArray array = getResources().obtainTypedArray(R.array.images);
+        collapsingImageView.setImageDrawable(array.getDrawable(i));
+    }
+
+    private void initRecyclerView() {
+        if (audioList.size() > 0) {
+            RecyclerView recyclerView = findViewById(R.id.recyclerView);
+            RecyclerView_Adapter adapter = new RecyclerView_Adapter(audioList, getApplication());
+            recyclerView.setAdapter(adapter);
+            recyclerView.setLayoutManager(new LinearLayoutManager(this));
+            recyclerView.addOnItemTouchListener(new CustomTouchListener(this, new onItemClickListener() {
+                @Override
+                public void onClick(View view, int index) {
+                    //playAudio(index);
+                }
+            }));
+        }
+
+    }
+
+    private void checkSelfPermission() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                        != PackageManager.PERMISSION_GRANTED) {
+            //未取得權限，向使用者要求允許權限
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_EXTERNAL_STORAGE},
+                    REQUEST_PERMISSION);
+        }
+    }
+
 
     // 選擇完後覆寫方法
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        switch (requestCode){
+        switch (requestCode) {
             case REQUEST_PERMISSION:
                 if (grantResults.length > 0 &&
-                        grantResults[0] == PackageManager.PERMISSION_GRANTED){
+                        grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     //取得權限
                 }
         }
@@ -100,9 +150,9 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private void playAudio(String media){
+    private void playAudio(String media) {
         //Check is service is active
-        if (!serviceBound){ //true
+        if (!serviceBound) { //true
             Intent playerIntent = new Intent(this, MediaPlayerService.class);
             playerIntent.putExtra("media", media);
             startService(playerIntent);
@@ -117,7 +167,7 @@ public class MainActivity extends AppCompatActivity {
      * 要從本地設備獲取數據，它以升序從設備檢索數據
      * 從設備檢索數據後，該playAudio()功能可以在設備上播放Service
      */
-    private void loadAudio(){
+    private void loadAudio() {
         ContentResolver contentResolver = getContentResolver();
 
         Uri uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
@@ -125,9 +175,9 @@ public class MainActivity extends AppCompatActivity {
         String sortOrder = MediaStore.Audio.Media.TITLE + "ASC";
         Cursor cursor = contentResolver.query(uri, null, selection, null, sortOrder);
 
-        if (cursor != null && cursor.getCount() > 0){
+        if (cursor != null && cursor.getCount() > 0) {
             audioList = new ArrayList<>();
-            while (cursor.moveToNext()){
+            while (cursor.moveToNext()) {
                 String data = cursor.getString(cursor.getColumnIndex(MediaStore.Audio.Media.DATA));
                 String title = cursor.getString(cursor.getColumnIndex(MediaStore.Audio.Media.TITLE));
                 String album = cursor.getString(cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM));
