@@ -10,6 +10,8 @@ import android.media.MediaPlayer;
 import android.media.session.PlaybackState;
 import android.os.Binder;
 import android.os.IBinder;
+import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import java.io.IOException;
@@ -37,6 +39,11 @@ public class MediaPlayerService extends Service implements
 
     // Binder given to clients
     private final IBinder iBinder = new LocalBinder();
+
+    //處理來電 Handle incoming phone calls
+    private boolean ongoingCall = false; //正在進行通話  ongoing (前進、不斷的)
+    private PhoneStateListener phoneStateListener;
+    private TelephonyManager telephonyManager;
 
     /**
      * Service lifecycle methods 生命週期
@@ -285,10 +292,50 @@ public class MediaPlayerService extends Service implements
         }
     };
 
+    //要使其BroadcastReceiver可用，必須註冊它
     private void registerBecomingNoisyReceiver(){
         //register after getting audio focus
         IntentFilter intentFilter = new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
         registerReceiver(becomingNoisyReceiver, intentFilter);
+    }
+
+    /**
+     * 處理來電 Handle incoming phone calls
+     * callStateListener()是PhoneStateListener偵聽TelephonyManager狀態更改的實現。
+     * TelephonyManager提供對設備上電話服務的信息訪問，並監聽設備呼叫狀態的變化並對這些變化作出反應。
+     */
+    private void callStateListener(){
+        // Get the telephony manager 獲取電話管理員
+        telephonyManager = (TelephonyManager)getSystemService(Context.TELEPHONY_SERVICE);
+        //Starting listening for PhoneState changes
+        phoneStateListener = new PhoneStateListener(){
+            @Override
+            public void onCallStateChanged(int state, String phoneNumber) {
+                switch (state){
+                    //if at least one call exists or the phone is ringing
+                    //pause the MediaPlayer
+                    case TelephonyManager.CALL_STATE_OFFHOOK:
+                    case TelephonyManager.CALL_STATE_RINGING:
+                        if (mediaFile != null){
+                            pauseMedia();
+                            ongoingCall = true;
+                        }
+                        break;
+                    case TelephonyManager.CALL_STATE_IDLE:
+                        // Phone idle. Start playing.
+                        if(mediaPlayer != null){
+                            if (ongoingCall){
+                                ongoingCall = false;
+                                resumeMedia();
+                            }
+                        }
+                        break;
+                }
+            }
+        };
+        // Register the listener with the telephony manager
+        // Listen for changes to the device call state.
+        telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
     }
 
     /**
