@@ -294,7 +294,7 @@ public class MediaPlayerService extends Service implements
         public void onReceive(Context context, Intent intent) {
             //pause audio on ACTION_AUDIO_BECOMING_NOISY
             pauseMedia();
-            //buildNotification(PlaybackState.PAUSE);
+            buildNotification(PlaybackState.ACTION_PAUSE);
         }
     };
 
@@ -342,6 +342,37 @@ public class MediaPlayerService extends Service implements
         // Register the listener with the telephony manager
         // Listen for changes to the device call state.
         telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
+    }
+
+    /**
+     * Play new Audio 播放新的音頻廣播
+     */
+    private BroadcastReceiver playNewAudio = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            //Get the new media index form SharedPreferences
+            audioIndex = new StorageUtil(getApplicationContext()).loadAudioIndex();
+            if (audioIndex != -1 && audioIndex < audioList.size()){
+                //index is in a valid range (index處於有效範圍內)
+                activeAudio = audioList.get(audioIndex);
+            } else {
+                stopSelf();
+            }
+
+            //A PLAY_NEW_AUDIO action received
+            //reset mediaPlayer to play the new Audio (重置mediaPlayer以播放新音頻)
+            stopMedia();
+            mediaPlayer.reset();
+            initMediaPlayer();
+            updateMetaData();
+            buildNotification(PlaybackState.STATE_PLAYING);
+        }
+    };
+
+    private void register_playNewAudio(){
+        //Register playNewMedia receiver
+        IntentFilter filter = new IntentFilter(MainActivity.Broadcast_PLAY_NEW_AUDIO);
+        registerReceiver(playNewAudio, filter);
     }
 
     /**
