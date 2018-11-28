@@ -31,6 +31,8 @@ import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
+    public static final String Broadcast_PLAY_NEW_AUDIO = "com.claire.audioplayerapp.PlayNewAudio";
+
     private static final int REQUEST_PERMISSION = 100;
     //綁定MediaPlayer
     private MediaPlayerService playerService;
@@ -150,16 +152,28 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private void playAudio(String media) {
+    private void playAudio(int audioIndex) {
         //Check is service is active
         if (!serviceBound) { //true
+            //Store Serializable audioList to SharedPreferences
+            StorageUtil storage = new StorageUtil(getApplicationContext());
+            storage.storeAudio(audioList);
+            storage.storeAudioIndex(audioIndex);
+
             Intent playerIntent = new Intent(this, MediaPlayerService.class);
-            playerIntent.putExtra("media", media);
             startService(playerIntent);
             bindService(playerIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+
         } else {
+
+            //Store the new audioIndex to SharedPreferences
+            StorageUtil storage = new StorageUtil(getApplicationContext());
+            storage.storeAudioIndex(audioIndex);
+
             //Service is active
-            //Send media with BroadcastReceiver
+            //Send a broadcast to the service -> PLAY_NEW_AUDIO
+            Intent broadcastIntent = new Intent(Broadcast_PLAY_NEW_AUDIO);
+            sendBroadcast(broadcastIntent);
         }
     }
 

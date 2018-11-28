@@ -15,6 +15,7 @@ import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 // Service需要在AndroidManifest.xml文件中聲明 <service android:name=".MediaPlayerService"/>
 public class MediaPlayerService extends Service implements
@@ -44,6 +45,11 @@ public class MediaPlayerService extends Service implements
     private boolean ongoingCall = false; //正在進行通話  ongoing (前進、不斷的)
     private PhoneStateListener phoneStateListener;
     private TelephonyManager telephonyManager;
+
+    //List of available Audio files 可用音頻文件列表
+    private ArrayList<Audio> audioList;
+    private int audioIndex = -1;
+    private Audio activeAudio; //an object of the currently playing audio 當前播放音頻的對象
 
     /**
      * Service lifecycle methods 生命週期
