@@ -60,6 +60,27 @@ public class MediaPlayerService extends Service implements
     }
 
     /**
+     * 註冊BroadcastReceiver
+     */
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        // Perform one-time setup procedures 執行一次性設置程序
+
+        //Manage incoming phone calls during playback. 在播放期間管理來電
+        //Pause MediaPlayer on incoming call, 在來電時暫停MediaPlayer
+        //Resume on hangup.掛機時恢復
+        callStateListener();
+
+        //ACTION_AUDIO_BECOMING_NOISY -- change in audio outputs -- BroadcastReceiver
+        registerBecomingNoisyReceiver();
+        //Listen for new Audio to play -- BroadcastReceiver
+        register_playNewAudio();
+    }
+
+
+
+    /**
      * The system calls method when an activity, request the service be started
      * 系統在活動時調用此方法，請求啟動服務
      */
@@ -94,6 +115,20 @@ public class MediaPlayerService extends Service implements
             mediaPlayer.release();
         }
         removeAudioFocus();
+
+        //Disable the PhoneStateListener
+        if (phoneStateListener != null){
+            telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE);
+        }
+
+        removeNotification();
+
+        //unregister BroadcastReceivers 取消註冊
+        unregisterReceiver(becomingNoisyReceiver);
+        unregisterReceiver(playNewAudio);
+
+        //clear cached playlist 清除緩存的播放列表
+        new StorageUtil(getApplicationContext()).clearCachedAudioPlaylist();
     }
 
     /**
