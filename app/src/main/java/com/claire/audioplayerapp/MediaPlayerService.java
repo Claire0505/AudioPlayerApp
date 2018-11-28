@@ -1,10 +1,13 @@
 package com.claire.audioplayerapp;
 
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.session.PlaybackState;
 import android.os.Binder;
 import android.os.IBinder;
 import android.util.Log;
@@ -77,7 +80,7 @@ public class MediaPlayerService extends Service implements
             stopMedia();
             mediaPlayer.release();
         }
-        revomeAudioFocus();
+        removeAudioFocus();
     }
 
     /**
@@ -265,8 +268,27 @@ public class MediaPlayerService extends Service implements
         return false;
     }
     //釋放音頻焦點
-    private boolean revomeAudioFocus(){
+    private boolean removeAudioFocus(){
         return AudioManager.AUDIOFOCUS_REQUEST_GRANTED == audioManager.abandonAudioFocus(this);
+    }
+
+    /**
+     * 更改音頻輸出(耳機已移除)，當用戶從插孔中取出耳機時，媒體停止播戶放
+     * ACTION_AUDIO_BECOMING_NOISY -- change in audio outputs
+     */
+    private BroadcastReceiver becomingNoisyReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            //pause audio on ACTION_AUDIO_BECOMING_NOISY
+            pauseMedia();
+            //buildNotification(PlaybackState.PAUSE);
+        }
+    };
+
+    private void registerBecomingNoisyReceiver(){
+        //register after getting audio focus
+        IntentFilter intentFilter = new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
+        registerReceiver(becomingNoisyReceiver, intentFilter);
     }
 
     /**
