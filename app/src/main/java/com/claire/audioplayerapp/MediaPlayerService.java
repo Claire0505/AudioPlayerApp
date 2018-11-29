@@ -1,15 +1,26 @@
 package com.claire.audioplayerapp;
 
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.AudioManager;
+import android.media.MediaMetadata;
 import android.media.MediaPlayer;
+import android.media.session.MediaController;
+import android.media.session.MediaSession;
+import android.media.session.MediaSessionManager;
 import android.media.session.PlaybackState;
 import android.os.Binder;
 import android.os.IBinder;
+import android.os.RemoteException;
+import android.support.v4.app.NotificationCompat;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -27,6 +38,23 @@ public class MediaPlayerService extends Service implements
         MediaPlayer.OnBufferingUpdateListener,
         //處理AudioFocus來自其他想要播放媒體文件的應用程序請求
         AudioManager.OnAudioFocusChangeListener {
+
+    public static final String ACTION_PLAY = "com.claire.audioplayerapp.ACTION_PLAY";
+    public static final String ACTION_PAUSE = "com.claire.audioplayerapp.ACTION_PAUSE";
+    public static final String ACTION_PREVIOUS = "com.claire.audioplayerapp.ACTION_PREVIOUS"; //以前
+    public static final String ACTION_NEXT = "com.claire.audioplayerapp.ACTION_NEXT";
+    public static final String ACTION_STOP = "com.claire.audioplayerapp.ACTION_STOP";
+
+    /**
+     *  MediaSession 控制媒體播放，允許與媒體控制器，音量鍵，媒體按鈕和傳輸控件進行交互
+     */
+    private MediaSessionManager mediaSessionManager;
+    private MediaSession mediaSession;
+    private MediaController.TransportControls transportControls;
+
+    //AudioPlayer notification ID
+    private static final int NOTIFICATION_ID = 101;
+
 
     private MediaPlayer mediaPlayer;
     //path to the audio file
@@ -329,7 +357,7 @@ public class MediaPlayerService extends Service implements
         public void onReceive(Context context, Intent intent) {
             //pause audio on ACTION_AUDIO_BECOMING_NOISY
             pauseMedia();
-            buildNotification(PlaybackState.ACTION_PAUSE);
+            buildNotification(PlaybackStatusEnum.PAUSED);
         }
     };
 
@@ -400,7 +428,7 @@ public class MediaPlayerService extends Service implements
             mediaPlayer.reset();
             initMediaPlayer();
             updateMetaData();
-            buildNotification(PlaybackState.STATE_PLAYING);
+            buildNotification(PlaybackStatusEnum.PAUSED);
         }
     };
 
@@ -408,6 +436,236 @@ public class MediaPlayerService extends Service implements
         //Register playNewMedia receiver
         IntentFilter filter = new IntentFilter(MainActivity.Broadcast_PLAY_NEW_AUDIO);
         registerReceiver(playNewAudio, filter);
+    }
+
+    /**
+     * MediaSession and Notification actions
+     * 設置MediaSession回調以處理來自通知按鈕的事件
+     */
+    private void initMediaSession() throws RemoteException{
+        if (mediaSessionManager != null) return; //mediaSessionManager exists 存在
+
+        mediaSessionManager = (MediaSessionManager)getSystemService(Context.MEDIA_SESSION_SERVICE);
+        //Create a new MediaSession
+        mediaSession = new MediaSession(getApplicationContext(),"AudioPlayer");
+        //Get MediaSessions transport controls (獲取MediaSessions傳輸控件)
+        transportControls = mediaSession.getController().getTransportControls();
+        //set MediaSession -> ready to receive media commands (準備接收命令)
+        mediaSession.setActive(true);
+        //indicate that the MediaSession handles transport control commands (表示MediaSession處理傳輸控制命令)
+        // through its MediaSession.Callback.
+        mediaSession.setFlags(MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+
+        //Set mediaSession's MetaData
+        updateMetaData();
+
+        //Attach Callback to receive MediaSession updates
+        mediaSession.setCallback(new MediaSession.Callback() {
+
+            // Implement callbacks
+
+            @Override
+            public void onPlay() {
+                super.onPlay();
+                resumeMedia();
+                buildNotification(PlaybackStatusEnum.PLAYING);
+            }
+
+            @Override
+            public void onPause() {
+                super.onPause();
+                pauseMedia();
+                buildNotification(PlaybackStatusEnum.PAUSED);
+            }
+
+            @Override
+            public void onSkipToNext() {
+                super.onSkipToNext();
+                skipToNext();
+                updateMetaData();
+                buildNotification(PlaybackStatusEnum.PLAYING);
+            }
+
+            @Override
+            public void onSkipToPrevious() {
+                super.onSkipToPrevious();
+
+                skipToPrevious();
+                updateMetaData();
+                buildNotification(PlaybackStatusEnum.PLAYING);
+            }
+
+            @Override
+            public void onStop() {
+                super.onStop();
+                removeNotification();
+                //Stop the service
+                stopSelf();
+            }
+
+            @Override
+            public void onSeekTo(long pos) {
+                super.onSeekTo(pos);
+            }
+        });
+
+    }
+
+    private void skipToNext(){
+        if (audioIndex == audioList.size() - 1){
+            //if last in playlist
+            audioIndex = 0;
+            activeAudio = audioList.get(audioIndex);
+        } else {
+            //get next in playlist
+            activeAudio = audioList.get(++audioIndex);
+        }
+
+        //Update stored index
+        new StorageUtil(getApplicationContext()).storeAudioIndex(audioIndex);
+
+        stopMedia();
+        mediaPlayer.reset();
+        initMediaPlayer();
+    }
+
+    private void skipToPrevious(){
+        if (audioIndex == 0){
+            //if first in playlist
+            //set index to the last of audioList
+            audioIndex = audioList.size() - 1;
+            activeAudio = audioList.get(audioIndex);
+        } else {
+            //get previous in playlist 獲取上一個播放列表
+            activeAudio = audioList.get(--audioIndex);
+        }
+
+        //Update stored index
+        new StorageUtil(getApplicationContext()).storeAudioIndex(audioIndex);
+
+        stopMedia();
+        //reset mediaPlayer
+        mediaPlayer.reset();
+        initMediaPlayer();
+    }
+
+    /**
+     * 跟踪其播放狀態
+     * buildNotification()功能主要目的是構建通知UI並設罝當用戶單擊通知按鈕時將觸發的所有事件。
+     * 可以通過函數生成PendingIntents playbackAction()。
+     * Notification actions -> playbackAction()
+     *  0 -> Play
+     *  1 -> Pause
+     *  2 -> Next track
+     *  3 -> Previous track
+     */
+    private void buildNotification(PlaybackStatusEnum playbackStatusEnum) {
+        int notificationAction = android.R.drawable.ic_media_pause; //needs to be initialized
+        PendingIntent play_pauseAction = null;
+
+        //Build a new notification according to the current state of the MediaPlayer
+        if (playbackStatusEnum == PlaybackStatusEnum.PLAYING){
+            notificationAction = android.R.drawable.ic_media_pause;
+            //create the pause action
+            play_pauseAction = playbackAction(1);
+        } else if (playbackStatusEnum == PlaybackStatusEnum.PAUSED){
+            notificationAction = android.R.drawable.ic_media_play;
+            //create the play action
+            play_pauseAction = playbackAction(0);
+        }
+
+        Bitmap largeIcon = BitmapFactory.decodeResource(getResources(),R.drawable.image1); //replace with your own image
+
+        //Create a new Notification
+        Notification.Builder notificationBuilder =
+                (Notification.Builder) new Notification.Builder(this)
+                .setShowWhen(false)
+                // Set the Notification style
+                .setStyle(new Notification.MediaStyle()
+                    //Attach our MediaSession token
+                    .setMediaSession(mediaSession.getSessionToken())
+                    // Show our playback controls in the notification view)
+                    .setShowActionsInCompactView(0,1,2))
+                // Set the Notification color
+                .setColor(getResources().getColor(R.color.colorAccent))
+                // Set the large and small icons
+                .setLargeIcon(largeIcon)
+                .setSmallIcon(android.R.drawable.stat_sys_headset)
+                // Set Notification content information
+                .setContentText(activeAudio.getArtist())
+                .setContentTitle(activeAudio.getAlbum())
+                .setContentInfo(activeAudio.getTitle())
+                // Add playback actions
+                .addAction(android.R.drawable.ic_media_previous,"previous", playbackAction(3))
+                .addAction(notificationAction, "pause", play_pauseAction)
+                .addAction(android.R.drawable.ic_media_next, "next", playbackAction(2));
+
+        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .notify(NOTIFICATION_ID, notificationBuilder.build());
+
+
+    }
+
+    private void removeNotification(){
+        NotificationManager notificationManager = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+        notificationManager.cancel(NOTIFICATION_ID);
+    }
+
+    private PendingIntent playbackAction(int actionNumber) {
+        Intent playbackAction = new Intent(this, MediaPlayerService.class);
+        switch (actionNumber){
+            case 0:
+                //Play
+                playbackAction.setAction(ACTION_PLAY);
+                return PendingIntent.getService(this, actionNumber, playbackAction,0);
+            case 1:
+                //Pause
+                return PendingIntent.getService(this,actionNumber,playbackAction,0);
+            case 2:
+                //Next track 下一首曲目
+                playbackAction.setAction(ACTION_NEXT);
+                return PendingIntent.getService(this, actionNumber, playbackAction, 0);
+            case 3:
+                //Next track 下一首曲目
+                playbackAction.setAction(ACTION_PREVIOUS);
+                return PendingIntent.getService(this, actionNumber, playbackAction, 0);
+            default:
+                break;
+        }
+
+        return null;
+    }
+
+    /**
+     * 當用戶單擊通知按鈕時，服務會生成操作，因此需要方法來處理傳入操作
+     */
+    private void handleIncomingActions(Intent playbackAction){
+
+        if (playbackAction == null || playbackAction.getAction() == null) return;
+
+        String actionString = playbackAction.getAction();
+        if (actionString.equalsIgnoreCase(ACTION_PLAY)){
+            transportControls.play();
+        } else if (actionString.equalsIgnoreCase(ACTION_PAUSE)){
+            transportControls.pause();
+        } else if (actionString.equalsIgnoreCase(ACTION_NEXT)){
+            transportControls.skipToNext();
+        } else if (actionString.equalsIgnoreCase(ACTION_PREVIOUS)){
+            transportControls.skipToPrevious();
+        } else if (actionString.equalsIgnoreCase(ACTION_STOP)){
+            transportControls.stop();
+        }
+    }
+
+    private void updateMetaData() {
+        Bitmap albumArt = BitmapFactory.decodeResource(getResources(), R.drawable.image1); //replace with medias albumArt
+        // Update the current metadata
+        mediaSession.setMetadata(new MediaMetadata.Builder()
+            .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, albumArt)
+            .putString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST, activeAudio.getArtist())
+            .putString(MediaMetadata.METADATA_KEY_ALBUM, activeAudio.getAlbum())
+            .putString(MediaMetadata.METADATA_KEY_TITLE, activeAudio.getTitle())
+            .build());
     }
 
     /**
