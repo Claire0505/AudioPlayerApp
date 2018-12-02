@@ -17,7 +17,7 @@ public class CustomTouchListener implements RecyclerView.OnItemTouchListener {
         this.clickListener = clickListener;
         gestureDetector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener(){
             @Override
-            public boolean onSingleTapConfirmed(MotionEvent e) {
+            public boolean onSingleTapUp(MotionEvent e) {
                 return true;
             }
         });

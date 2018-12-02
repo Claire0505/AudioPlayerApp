@@ -115,9 +115,18 @@ public class MediaPlayerService extends Service implements
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         try {
-            //An audio file is passed to the service through putExtra();
-            //音頻文件通過putExtra()傳遞給服務
-            mediaFile = intent.getExtras().getString("media");
+            //Load data from SharePreferences
+            StorageUtil storage = new StorageUtil(getApplicationContext());
+            audioList = storage.loadAudio();
+            audioIndex = storage.loadAudioIndex();
+
+            if (audioIndex != -1 && audioIndex < audioList.size()){
+                //index is in a valid range
+                activeAudio = audioList.get(audioIndex);
+            } else {
+                stopSelf();
+            }
+
         }catch (NullPointerException e){
 
             stopSelf();
@@ -129,8 +138,20 @@ public class MediaPlayerService extends Service implements
             stopSelf();
         }
 
-        if (mediaFile != null && !mediaFile.equals(""))
-            initMediaPlayer();
+        if (mediaSessionManager == null){
+            try {
+                initMediaSession();
+                initMediaPlayer();
+
+            } catch (RemoteException e) {
+                e.printStackTrace();
+                stopSelf();
+            }
+            buildNotification(PlaybackStatusEnum.PLAYING);
+        }
+
+        //Handle Intent action from MediaSession.TransportControls
+        handleIncomingActions(intent);
 
         return super.onStartCommand(intent, flags, startId);
     }
@@ -181,7 +202,7 @@ public class MediaPlayerService extends Service implements
 
         try {
             // set the data source the mediaFile location
-            mediaPlayer.setDataSource(mediaFile);
+            mediaPlayer.setDataSource(activeAudio.getData());
         } catch (IOException e) {
             e.printStackTrace();
             stopSelf();
@@ -620,6 +641,7 @@ public class MediaPlayerService extends Service implements
                 return PendingIntent.getService(this, actionNumber, playbackAction,0);
             case 1:
                 //Pause
+                playbackAction.setAction(ACTION_PAUSE);
                 return PendingIntent.getService(this,actionNumber,playbackAction,0);
             case 2:
                 //Next track 下一首曲目

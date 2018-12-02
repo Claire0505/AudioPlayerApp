@@ -54,8 +54,8 @@ public class MainActivity extends AppCompatActivity {
         initHandler();
 
         loadCollapsingImage(imageIndex);
-        //loadAudio(); //從設備檢索數據後，該playAudio()功能可以在設備上播放Service
-        //initRecyclerView();
+        loadAudio(); //從設備檢索數據後，該playAudio()功能可以在設備上播放Service
+        initRecyclerView();
 
     }
 
@@ -72,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 //playAudio("https://upload.wikimedia.org/wikipedia/commons/6/6c/Grieg_Lyric_Pieces_Kobold.ogg");
                 //play the first audio in the ArrayList
-                //playAudio(audioList.get(0).getData());
+               // playAudio(2);
 
                 if (imageIndex == 4) {
                     imageIndex = 0;
@@ -80,8 +80,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     loadCollapsingImage(++imageIndex);
                 }
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
+
             }
         });
 
@@ -101,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
             recyclerView.addOnItemTouchListener(new CustomTouchListener(this, new onItemClickListener() {
                 @Override
                 public void onClick(View view, int index) {
-                    //playAudio(index);
+                    playAudio(index);
                 }
             }));
         }
@@ -187,7 +186,8 @@ public class MainActivity extends AppCompatActivity {
         Uri uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
         String selection = MediaStore.Audio.Media.IS_MUSIC + "!=0";
         String sortOrder = MediaStore.Audio.Media.TITLE + "ASC";
-        Cursor cursor = contentResolver.query(uri, null, selection, null, sortOrder);
+        //Cursor cursor = contentResolver.query(uri, null, selection, null, sortOrder);
+        Cursor cursor = contentResolver.query(uri, null, null, null, null);
 
         if (cursor != null && cursor.getCount() > 0) {
             audioList = new ArrayList<>();
@@ -202,6 +202,16 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         cursor.close();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (serviceBound){
+            unbindService(serviceConnection);
+            //service is active
+            playerService.stopSelf();
+        }
     }
 
     @Override
